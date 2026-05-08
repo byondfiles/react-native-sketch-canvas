@@ -57,6 +57,7 @@ class SketchCanvas(context: ThemedReactContext) : View(context) {
     private val mArrSketchOnText = ArrayList<CanvasText>()
     private var mIsCanvasInitialized = false
     private var mPendingImageLoad: java.util.concurrent.Future<*>? = null
+    private var mBackgroundDrawn: Boolean = false
 
     companion object {
         private const val MAX_BITMAP_WIDTH = 4096
@@ -819,30 +820,38 @@ class SketchCanvas(context: ThemedReactContext) : View(context) {
         }
     }
 
+    fun drawBackgroundImage() {
+      if (mBackgroundImage != null) {
+        val dstRect = Rect()
+        mDrawingCanvas?.getClipBounds(dstRect)
+        mDrawingCanvas?.drawBitmap(
+          mBackgroundImage!!,
+          null,
+          Utility.fillImage(
+            mBackgroundImage!!.width.toFloat(),
+            mBackgroundImage!!.height.toFloat(),
+            dstRect.width().toFloat(),
+            dstRect.height().toFloat(),
+            mContentMode!!
+          ),
+          null
+        )
+        mBackgroundDrawn = true;
+      }
+    }
+
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
         if (mNeedsFullRedraw && mDrawingCanvas != null) {
             mDrawingCanvas!!.drawColor(Color.TRANSPARENT, PorterDuff.Mode.MULTIPLY)
+            drawBackgroundImage()
             for (path in mPaths) {
                 path.draw(mDrawingCanvas!!)
             }
             mNeedsFullRedraw = false
         }
-        if (mBackgroundImage != null) {
-            val dstRect = Rect()
-            canvas.getClipBounds(dstRect)
-            canvas.drawBitmap(
-                mBackgroundImage!!,
-                null,
-                Utility.fillImage(
-                    mBackgroundImage!!.width.toFloat(),
-                    mBackgroundImage!!.height.toFloat(),
-                    dstRect.width().toFloat(),
-                    dstRect.height().toFloat(),
-                    mContentMode!!
-                ),
-                null
-            )
+        if (mBackgroundImage != null && !mBackgroundDrawn) {
+           drawBackgroundImage()
         }
         for (text in mArrSketchOnText) {
             canvas.drawText(
