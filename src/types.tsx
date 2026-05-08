@@ -91,6 +91,7 @@ export interface SketchCanvasProps {
   onStrokeChanged?: (x: number, y: number) => void;
   onStrokeEnd?: (path: Path) => void;
   onSketchSaved?: (result: boolean, path: string) => void;
+  onPinchStart?: () => void;
   onGenerateBase64?: (result: { base64: string }) => void;
   onPathsChange?: (pathsCount: number) => void;
   onLayout?: (event: any) => void;
@@ -167,6 +168,7 @@ export interface RNSketchCanvasProps {
     cropToImageSize?: boolean;
   };
   onSketchSaved?: (result: boolean, path: string) => void;
+  onPinchStart?: () => void;
   onGenerateBase64?: (result: { base64: string }) => void;
   onCanvasReady?: () => void;
   /**

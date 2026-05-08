@@ -80,6 +80,7 @@ export default class RNSketchCanvas extends React.Component<
 
     savePreference: null,
     onSketchSaved: () => {},
+    onPinchStart: () => {},
     onGenerateBase64: () => {},
 
     text: null,
@@ -322,6 +323,7 @@ export default class RNSketchCanvas extends React.Component<
           onSketchSaved={(success, path) =>
             this.props.onSketchSaved?.(success, path)
           }
+          onPinchStart={this.props.onPinchStart}
           onLayout={this.props.onLayout}
           onPathsChange={this.props.onPathsChange}
           onCanvasReady={this.props.onCanvasReady}

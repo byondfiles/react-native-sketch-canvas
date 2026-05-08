@@ -37,6 +37,7 @@ class SketchCanvas extends React.Component<SketchCanvasProps, CanvasState> {
     onStrokeChanged: () => {},
     onStrokeEnd: () => {},
     onSketchSaved: () => {},
+    onPinchStart: () => {},
     onGenerateBase64: () => {},
     user: null,
 
@@ -80,7 +81,15 @@ class SketchCanvas extends React.Component<SketchCanvasProps, CanvasState> {
 
     this.panResponder = PanResponder.create({
       // Ask to be the responder:
-      onStartShouldSetPanResponder: (_evt, _gestureState) => true,
+      onStartShouldSetPanResponder: (_evt, _gestureState) => {
+        const amountOfTouches = _evt.nativeEvent.touches.length;
+        if (amountOfTouches === 2) {
+          this.props.onPinchStart?.();
+          return false;
+        }
+
+        return true;
+      },
       onStartShouldSetPanResponderCapture: (_evt, _gestureState) => true,
       onMoveShouldSetPanResponder: (_evt, _gestureState) => true,
       onMoveShouldSetPanResponderCapture: (_evt, _gestureState) => true,
@@ -132,6 +141,12 @@ class SketchCanvas extends React.Component<SketchCanvasProps, CanvasState> {
         if (!this.props.touchEnabled) {
           return;
         }
+        const e = _evt.nativeEvent;
+
+        if (e.touches.length === 2) {
+          return this.props.onPinchStart;
+        }
+
         if (this._path && this.ref.current) {
           Commands.addPoint(
             this.ref.current,
