@@ -31,6 +31,7 @@ class SketchCanvas extends React.Component<SketchCanvasProps, CanvasState> {
     style: null,
     strokeColor: '#000000',
     strokeWidth: 3,
+    onLayout: ()=> {},
     onPathsChange: () => {},
     onStrokeStart: (_x: number, _y: number) => {},
     onStrokeChanged: () => {},
@@ -388,6 +389,7 @@ class SketchCanvas extends React.Component<SketchCanvasProps, CanvasState> {
           // Handle any queued paths using individual operations
           this._pathsToProcess.length > 0 &&
             this._pathsToProcess.forEach((p) => this.addPath(p));
+          this.props.onLayout?.(e)
         }}
         {...this.panResponder.panHandlers}
         onChange={(e: any) => {

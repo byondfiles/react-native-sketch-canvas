@@ -38,6 +38,7 @@ export default class RNSketchCanvas extends React.Component<
     onUndoPressed: () => {},
     onClearPressed: () => {},
     onPathsChange: () => {},
+    onLayout: () => {},
     user: null,
 
     closeComponent: null,
@@ -321,6 +322,7 @@ export default class RNSketchCanvas extends React.Component<
           onSketchSaved={(success, path) =>
             this.props.onSketchSaved?.(success, path)
           }
+          onLayout={this.props.onLayout}
           onPathsChange={this.props.onPathsChange}
           onCanvasReady={this.props.onCanvasReady}
           onInitialPathsLoaded={this.props.onInitialPathsLoaded}

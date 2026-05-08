@@ -93,6 +93,7 @@ export interface SketchCanvasProps {
   onSketchSaved?: (result: boolean, path: string) => void;
   onGenerateBase64?: (result: { base64: string }) => void;
   onPathsChange?: (pathsCount: number) => void;
+  onLayout?: (event: any) => void;
   onCanvasReady?: () => void;
   /**
    * Callback fired when initial paths have been loaded into the canvas.
@@ -119,6 +120,7 @@ export interface RNSketchCanvasProps {
   onUndoPressed?: (id: number) => void;
   onClearPressed?: () => void;
   onPathsChange?: (pathsCount: number) => void;
+  onLayout?: (event: any) => void;
   user?: string;
 
   closeComponent?: JSX.Element;
