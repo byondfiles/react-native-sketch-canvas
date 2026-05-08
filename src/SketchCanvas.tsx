@@ -144,7 +144,7 @@ class SketchCanvas extends React.Component<SketchCanvasProps, CanvasState> {
         const e = _evt.nativeEvent;
 
         if (e.touches.length === 2) {
-          return this.props.onPinchStart;
+          return this.props.onPinchStart?.();
         }
 
         if (this._path && this.ref.current) {
