@@ -81,18 +81,10 @@ class SketchCanvas extends React.Component<SketchCanvasProps, CanvasState> {
 
     this.panResponder = PanResponder.create({
       // Ask to be the responder:
-      onStartShouldSetPanResponder: (_evt, _gestureState) => {
-        const amountOfTouches = _evt.nativeEvent.touches.length;
-        if (amountOfTouches === 2) {
-          this.props.onPinchStart?.();
-          return false;
-        }
-
-        return true;
-      },
-      onStartShouldSetPanResponderCapture: (_evt, _gestureState) => false,
-      onMoveShouldSetPanResponder: (_evt, _gestureState) => false,
-      onMoveShouldSetPanResponderCapture: (_evt, _gestureState) => false,
+      onStartShouldSetPanResponder: (_evt, _gestureState) => true,
+      onStartShouldSetPanResponderCapture: (_evt, _gestureState) => true,
+      onMoveShouldSetPanResponder: (_evt, _gestureState) => true,
+      onMoveShouldSetPanResponderCapture: (_evt, _gestureState) => true,
 
       onPanResponderGrant: (evt, gestureState) => {
         if (!this.props.touchEnabled) {
