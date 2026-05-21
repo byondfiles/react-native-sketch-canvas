@@ -90,9 +90,9 @@ class SketchCanvas extends React.Component<SketchCanvasProps, CanvasState> {
 
         return true;
       },
-      onStartShouldSetPanResponderCapture: (_evt, _gestureState) => true,
-      onMoveShouldSetPanResponder: (_evt, _gestureState) => true,
-      onMoveShouldSetPanResponderCapture: (_evt, _gestureState) => true,
+      onStartShouldSetPanResponderCapture: (_evt, _gestureState) => false,
+      onMoveShouldSetPanResponder: (_evt, _gestureState) => false,
+      onMoveShouldSetPanResponderCapture: (_evt, _gestureState) => false,
 
       onPanResponderGrant: (evt, gestureState) => {
         if (!this.props.touchEnabled) {
