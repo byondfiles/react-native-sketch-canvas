@@ -48,6 +48,7 @@ class SketchCanvas extends React.Component<SketchCanvasProps, CanvasState> {
 
     permissionDialogTitle: '',
     permissionDialogMessage: '',
+    canvasScale: 1,
   };
 
   _pathsToProcess: Path[];
@@ -56,6 +57,7 @@ class SketchCanvas extends React.Component<SketchCanvasProps, CanvasState> {
   _handle: any;
   _screenScale: number;
   _offset: { x: number; y: number };
+  _startPoint: { x: number; y: number };
   _size: { width: number; height: number };
   _initialized: boolean;
   panResponder: any;
@@ -76,6 +78,7 @@ class SketchCanvas extends React.Component<SketchCanvasProps, CanvasState> {
     this._handle = null;
     this._screenScale = Platform.OS === 'ios' ? 1 : PixelRatio.get();
     this._offset = { x: 0, y: 0 };
+    this._startPoint = { x: 0, y: 0 };
     this._size = { width: 0, height: 0 };
     this._initialized = false;
 
@@ -92,6 +95,7 @@ class SketchCanvas extends React.Component<SketchCanvasProps, CanvasState> {
         }
         const e = evt.nativeEvent;
         this._offset = { x: e.pageX - e.locationX, y: e.pageY - e.locationY };
+        this._startPoint = { x: gestureState.x0 - this._offset.x, y: gestureState.y0 - this._offset.y };
         this._path = {
           id: parseInt(String(Math.random() * 100000000), 10),
           color: this.props.strokeColor,
@@ -111,21 +115,21 @@ class SketchCanvas extends React.Component<SketchCanvasProps, CanvasState> {
             this.ref.current,
             parseFloat(
               (
-                Number((gestureState.x0 - this._offset.x).toFixed(2)) *
+                Number((this._startPoint.x).toFixed(2)) *
                 this._screenScale
               ).toString()
             ),
             parseFloat(
               (
-                Number((gestureState.y0 - this._offset.y).toFixed(2)) *
+                Number((this._startPoint.y).toFixed(2)) *
                 this._screenScale
               ).toString()
             )
           );
         }
 
-        const x = parseFloat((gestureState.x0 - this._offset.x).toFixed(2)),
-          y = parseFloat((gestureState.y0 - this._offset.y).toFixed(2));
+        const x = parseFloat((this._startPoint.x).toFixed(2)),
+          y = parseFloat((this._startPoint.y).toFixed(2));
         this._path.data.push(`${x},${y}`);
         this.props.onStrokeStart?.(x, y);
       },
@@ -140,25 +144,28 @@ class SketchCanvas extends React.Component<SketchCanvasProps, CanvasState> {
         }
 
         if (this._path && this.ref.current) {
+          const currentX = gestureState.moveX - this._offset.x;
+          const currentY = gestureState.moveY - this._offset.y;
+          const mappedX = (currentX - this._startPoint.x) / (this.props.canvasScale || 1) + this._startPoint.x;
+          const mappedY = (currentY - this._startPoint.y) / (this.props.canvasScale || 1) + this._startPoint.y;
+
           Commands.addPoint(
             this.ref.current,
             parseFloat(
               (
-                Number((gestureState.moveX - this._offset.x).toFixed(2)) *
+                Number(mappedX.toFixed(2)) *
                 this._screenScale
               ).toString()
             ),
             parseFloat(
               (
-                Number((gestureState.moveY - this._offset.y).toFixed(2)) *
+                Number(mappedY.toFixed(2)) *
                 this._screenScale
               ).toString()
             )
           );
-          const x = parseFloat(
-              (gestureState.moveX - this._offset.x).toFixed(2)
-            ),
-            y = parseFloat((gestureState.moveY - this._offset.y).toFixed(2));
+          const x = parseFloat(mappedX.toFixed(2)),
+            y = parseFloat(mappedY.toFixed(2));
           this._path.data.push(`${x},${y}`);
           this.props.onStrokeChanged?.(x, y);
         }

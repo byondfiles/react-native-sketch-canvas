@@ -101,6 +101,7 @@ export interface SketchCanvasProps {
    * @param loadedCount Number of paths successfully loaded
    */
   onInitialPathsLoaded?: (loadedCount: number) => void;
+  canvasScale?: number;
 
   getBase64?: (
     imageType: ImageType,
