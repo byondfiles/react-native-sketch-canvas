@@ -102,6 +102,21 @@ export interface SketchCanvasProps {
    */
   onInitialPathsLoaded?: (loadedCount: number) => void;
   canvasScale?: number;
+  /**
+   * How far a single finger has to travel, in screen points, before a stroke is
+   * handed to the native canvas. Filters out the jitter of a finger that is
+   * waiting for the second finger of a pinch, so a zoom gesture draws nothing.
+   * Raise it if a pinch still flickers, lower it if a stroke feels late.
+   */
+  minTravelToDraw?: number;
+  /**
+   * How long, in milliseconds, a gesture has to stay a single finger before its
+   * stroke reaches the native canvas. Points made in the meantime are buffered
+   * and drawn in one go, so nothing has to be taken back when the gesture turns
+   * out to be a pinch. Raise it if a fast pinch still flickers, lower it if the
+   * start of a stroke feels late.
+   */
+  minDelayToDraw?: number;
 
   getBase64?: (
     imageType: ImageType,

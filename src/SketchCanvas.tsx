@@ -49,6 +49,8 @@ class SketchCanvas extends React.Component<SketchCanvasProps, CanvasState> {
     permissionDialogTitle: '',
     permissionDialogMessage: '',
     canvasScale: 1,
+    minTravelToDraw: 12,
+    minDelayToDraw: 80,
   };
 
   _pathsToProcess: Path[];
@@ -58,6 +60,13 @@ class SketchCanvas extends React.Component<SketchCanvasProps, CanvasState> {
   _screenScale: number;
   _offset: { x: number; y: number };
   _startPoint: { x: number; y: number };
+  _pathStarted: boolean;
+  _multiTouch: boolean;
+  _travelled: boolean;
+  _grantedAt: number;
+  // Points made before the gesture is known to be a single finger draw. They
+  // are replayed to the native canvas the moment it is.
+  _pendingPoints: { x: number; y: number }[];
   _size: { width: number; height: number };
   _initialized: boolean;
   panResponder: any;
@@ -79,15 +88,39 @@ class SketchCanvas extends React.Component<SketchCanvasProps, CanvasState> {
     this._screenScale = Platform.OS === 'ios' ? 1 : PixelRatio.get();
     this._offset = { x: 0, y: 0 };
     this._startPoint = { x: 0, y: 0 };
+    this._pathStarted = false;
+    this._multiTouch = false;
+    this._travelled = false;
+    this._grantedAt = 0;
+    this._pendingPoints = [];
     this._size = { width: 0, height: 0 };
     this._initialized = false;
 
     this.panResponder = PanResponder.create({
-      // Ask to be the responder:
-      onStartShouldSetPanResponder: (_evt, _gestureState) => true,
-      onStartShouldSetPanResponderCapture: (_evt, _gestureState) => true,
-      onMoveShouldSetPanResponder: (_evt, _gestureState) => true,
-      onMoveShouldSetPanResponderCapture: (_evt, _gestureState) => true,
+      // Ask to be the responder. Nothing is captured on purpose: capturing
+      // takes the touch away from ancestors before they can react, which stops
+      // a surrounding scroll view from ever recognising a pinch.
+      onStartShouldSetPanResponder: (evt, _gestureState) => {
+        if (evt.nativeEvent.touches.length > 1) {
+          // This is the earliest moment a second finger is visible, earlier
+          // than any move event or the terminate that follows. Clearing the
+          // path here keeps a pinch from flickering whatever the first finger
+          // managed to draw while it was still alone.
+          this._abortPath();
+
+          // after the abort, because discarding resets this flag
+          this._multiTouch = true;
+
+          // two fingers are a zoom, leave the gesture alone
+          this.props.onPinchStart?.();
+          return false;
+        }
+
+        return true;
+      },
+      onStartShouldSetPanResponderCapture: (_evt, _gestureState) => false,
+      onMoveShouldSetPanResponder: (_evt, _gestureState) => false,
+      onMoveShouldSetPanResponderCapture: (_evt, _gestureState) => false,
 
       onPanResponderGrant: (evt, gestureState) => {
         if (!this.props.touchEnabled) {
@@ -96,42 +129,21 @@ class SketchCanvas extends React.Component<SketchCanvasProps, CanvasState> {
         const e = evt.nativeEvent;
         this._offset = { x: e.pageX - e.locationX, y: e.pageY - e.locationY };
         this._startPoint = { x: gestureState.x0 - this._offset.x, y: gestureState.y0 - this._offset.y };
+        this._pathStarted = false;
+        this._travelled = false;
+        this._pendingPoints = [];
+        this._grantedAt = Date.now();
+        this._multiTouch = e.touches.length > 1;
         this._path = {
           id: parseInt(String(Math.random() * 100000000), 10),
           color: this.props.strokeColor,
           width: this.props.strokeWidth,
           data: [],
         };
-
-        if (this.ref.current) {
-          Commands.newPath(
-            this.ref.current,
-            this._path.id,
-            processColor(this._path.color) as number,
-            this._path.width ? this._path.width * this._screenScale : 0
-          );
-
-          Commands.addPoint(
-            this.ref.current,
-            parseFloat(
-              (
-                Number((this._startPoint.x).toFixed(2)) *
-                this._screenScale
-              ).toString()
-            ),
-            parseFloat(
-              (
-                Number((this._startPoint.y).toFixed(2)) *
-                this._screenScale
-              ).toString()
-            )
-          );
-        }
-
-        const x = parseFloat((this._startPoint.x).toFixed(2)),
-          y = parseFloat((this._startPoint.y).toFixed(2));
-        this._path.data.push(`${x},${y}`);
-        this.props.onStrokeStart?.(x, y);
+        // The path is only handed to the native side once we know this gesture
+        // is a single finger draw. Drawing it here left a dot behind whenever
+        // the second finger of a pinch arrived, because the zoom recognizer can
+        // take the gesture away before any two finger move event reaches js.
       },
       onPanResponderMove: (_evt, gestureState) => {
         if (!this.props.touchEnabled) {
@@ -139,43 +151,47 @@ class SketchCanvas extends React.Component<SketchCanvasProps, CanvasState> {
         }
         const e = _evt.nativeEvent;
 
-        if (e.touches.length === 2) {
+        if (e.touches.length > 1) {
+          this._multiTouch = true;
           return this.props.onPinchStart?.();
         }
 
-        if (this._path && this.ref.current) {
-          const currentX = gestureState.moveX - this._offset.x;
-          const currentY = gestureState.moveY - this._offset.y;
-          const mappedX = (currentX - this._startPoint.x) / (this.props.canvasScale || 1) + this._startPoint.x;
-          const mappedY = (currentY - this._startPoint.y) / (this.props.canvasScale || 1) + this._startPoint.y;
-
-          Commands.addPoint(
-            this.ref.current,
-            parseFloat(
-              (
-                Number(mappedX.toFixed(2)) *
-                this._screenScale
-              ).toString()
-            ),
-            parseFloat(
-              (
-                Number(mappedY.toFixed(2)) *
-                this._screenScale
-              ).toString()
-            )
-          );
-          const x = parseFloat(mappedX.toFixed(2)),
-            y = parseFloat(mappedY.toFixed(2));
-          this._path.data.push(`${x},${y}`);
-          this.props.onStrokeChanged?.(x, y);
+        if (this._multiTouch) {
+          return;
         }
+
+        const currentX = gestureState.moveX - this._offset.x;
+        const currentY = gestureState.moveY - this._offset.y;
+
+        if (!this._travelled && this._travelledEnough(currentX, currentY)) {
+          this._travelled = true;
+        }
+
+        const mappedX = (currentX - this._startPoint.x) / (this.props.canvasScale || 1) + this._startPoint.x;
+        const mappedY = (currentY - this._startPoint.y) / (this.props.canvasScale || 1) + this._startPoint.y;
+
+        if (!this._pathStarted) {
+          // Hold on to the point. A pinch that starts now costs nothing to undo
+          // because the canvas never saw any of this.
+          this._pendingPoints.push({ x: mappedX, y: mappedY });
+
+          if (!this._travelled || !this._waitedLongEnough()) {
+            return;
+          }
+
+          this._beginPath();
+          return;
+        }
+
+        this._sendPoint(mappedX, mappedY);
       },
       onPanResponderRelease: (_evt, _gestureState) => {
-        this._handleStrokeEnd();
+        this._endGesture(false);
       },
 
       onPanResponderTerminate: (_evt, _gestureState) => {
-        this._handleStrokeEnd();
+        // Something else took the gesture over, a zoom recognizer for instance.
+        this._endGesture(true);
       },
 
       onShouldBlockNativeResponder: (_evt, _gestureState) => {
@@ -183,6 +199,114 @@ class SketchCanvas extends React.Component<SketchCanvasProps, CanvasState> {
       },
     });
   }
+
+  // Hands the pending path to the native side. Called on the first single
+  // finger move, or on release for a tap that never moved.
+  _beginPath = () => {
+    if (this._pathStarted || !this._path || !this.ref.current) {
+      return;
+    }
+
+    this._pathStarted = true;
+
+    Commands.newPath(
+      this.ref.current,
+      this._path.id,
+      processColor(this._path.color) as number,
+      this._path.width ? this._path.width * this._screenScale : 0
+    );
+
+    Commands.addPoint(
+      this.ref.current,
+      parseFloat(
+        (Number(this._startPoint.x.toFixed(2)) * this._screenScale).toString()
+      ),
+      parseFloat(
+        (Number(this._startPoint.y.toFixed(2)) * this._screenScale).toString()
+      )
+    );
+
+    const x = parseFloat(this._startPoint.x.toFixed(2)),
+      y = parseFloat(this._startPoint.y.toFixed(2));
+    this._path.data.push(`${x},${y}`);
+    this.props.onStrokeStart?.(x, y);
+
+    // Replay what was made while the gesture was still unconfirmed, so the
+    // stroke appears whole instead of starting where the waiting ended.
+    const pending = this._pendingPoints;
+    this._pendingPoints = [];
+    pending.forEach((point) => this._sendPoint(point.x, point.y));
+  };
+
+  _sendPoint = (mappedX: number, mappedY: number) => {
+    if (!this._path || !this.ref.current) {
+      return;
+    }
+
+    Commands.addPoint(
+      this.ref.current,
+      parseFloat((Number(mappedX.toFixed(2)) * this._screenScale).toString()),
+      parseFloat((Number(mappedY.toFixed(2)) * this._screenScale).toString())
+    );
+
+    const x = parseFloat(mappedX.toFixed(2)),
+      y = parseFloat(mappedY.toFixed(2));
+    this._path.data.push(`${x},${y}`);
+    this.props.onStrokeChanged?.(x, y);
+  };
+
+  _waitedLongEnough = () =>
+    Date.now() - this._grantedAt >= (this.props.minDelayToDraw ?? 80);
+
+  _travelledEnough = (currentX: number, currentY: number) => {
+    const dx = currentX - this._startPoint.x;
+    const dy = currentY - this._startPoint.y;
+
+    // Screen space on purpose. The jitter this filters out is a physical finger
+    // movement and does not shrink when the view is zoomed in.
+    return Math.sqrt(dx * dx + dy * dy) >= (this.props.minTravelToDraw ?? 12);
+  };
+
+  // Removes a path the native side already received.
+  _abortPath = () => {
+    if (this._path && this._pathStarted && this.ref.current) {
+      Commands.deletePath(this.ref.current, this._path.id);
+    }
+
+    this._discardPath();
+  };
+
+  _endGesture = (terminated: boolean) => {
+    if (!this._pathStarted) {
+      // A tap that never moved draws nothing, which is what the canvas did
+      // before the rewrite to this library. A stroke that was over before the
+      // wait elapsed does get drawn, otherwise a quick flick would vanish.
+      if (terminated || this._multiTouch || !this._travelled) {
+        return this._discardPath();
+      }
+
+      this._beginPath();
+      return this._handleStrokeEnd();
+    }
+
+    // Someone else took the gesture over, a zoom recognizer for instance, so
+    // whatever was scratched so far was never meant as a stroke.
+    if (terminated) {
+      return this._abortPath();
+    }
+
+    this._handleStrokeEnd();
+  };
+
+  // Throws the pending path away without touching the native canvas, which
+  // never received it.
+  _discardPath = () => {
+    this._path = null;
+    this._pathStarted = false;
+    this._multiTouch = false;
+    this._travelled = false;
+    this._pendingPoints = [];
+  };
 
   _handleStrokeEnd = () => {
     if (!this.props.touchEnabled) {
@@ -205,6 +329,9 @@ class SketchCanvas extends React.Component<SketchCanvasProps, CanvasState> {
     if (this.ref.current) {
       Commands.endPath(this.ref.current);
     }
+
+    this._pathStarted = false;
+    this._multiTouch = false;
   };
 
   _processText(text: any) {
