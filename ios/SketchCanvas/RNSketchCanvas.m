@@ -17,6 +17,9 @@
     CGImageRef _frozenImage, _translucentFrozenImage;
     BOOL _needsFullRedraw;
     BOOL _canvasIsReady;
+    // Whether the background image made it into the drawing context. Mirrors
+    // mBackgroundDrawn on the android side.
+    BOOL _backgroundDrawn;
 
     UIImage *_backgroundImage;
     UIImage *_backgroundImageScaled;
@@ -58,6 +61,7 @@
     
     _backgroundImage = nil;
     _backgroundImageScaled = nil;
+    _backgroundDrawn = NO;
     _backgroundImageContentMode = nil;
     
     _arrTextOnSketch = nil;
@@ -76,14 +80,50 @@
     [self invalidate];
 }
 
+// Draws the background image into the same context the strokes live in. That is
+// what lets the eraser, which paints transparency, cut through annotations that
+// arrived as a localSourceImage instead of only through strokes made this
+// session. Ported from byondfiles/react-native-sketch-canvas-old.
+- (void)drawBackgroundImage:(CGContextRef)context bounds:(CGRect)bounds {
+    if (!_backgroundImage || !context) {
+        return;
+    }
+
+    CGContextSetBlendMode(context, kCGBlendModeNormal);
+    CGContextSaveGState(context);
+    // A bitmap context has its origin bottom left, so flip before handing it a
+    // CGImage that was made for UIKit coordinates.
+    CGContextScaleCTM(context, 1.0, -1.0);
+    CGContextTranslateCTM(context, 0, -bounds.size.height);
+
+    if (!_backgroundImageScaled) {
+        _backgroundImageScaled = [self scaleImage:_backgroundImage toSize:bounds.size contentMode:_backgroundImageContentMode];
+    }
+
+    CGContextDrawImage(context, bounds, _backgroundImageScaled.CGImage);
+    CGContextRestoreGState(context);
+
+    _backgroundDrawn = YES;
+}
+
 - (void)drawRect:(CGRect)rect {
     CGContextRef context = UIGraphicsGetCurrentContext();
 
     CGRect bounds = self.bounds;
 
-    if (_needsFullRedraw) {
+    // The redraw that was supposed to carry the background may have run before
+    // there was a context to draw into, or before the image was set. Ask for
+    // another one rather than depending on the order those two arrive in.
+    if (_backgroundImage && !_backgroundDrawn) {
+        _needsFullRedraw = YES;
+    }
+
+    // Guarded on the context, so the flag is never spent on a redraw that
+    // cannot draw anything. The android side guards the same way.
+    if (_needsFullRedraw && _drawingContext) {
         [self setFrozenImageNeedsUpdate];
         CGContextClearRect(_drawingContext, bounds);
+        [self drawBackgroundImage:_drawingContext bounds:bounds];
         for (RNSketchData *path in _paths) {
             @autoreleasepool {
                 [path drawInContext:_drawingContext];
@@ -98,14 +138,6 @@
     
     if (!_translucentFrozenImage && _currentPath.isTranslucent) {
         _translucentFrozenImage = CGBitmapContextCreateImage(_translucentDrawingContext);
-    }
-
-    if (_backgroundImage) {
-        if (!_backgroundImageScaled) {
-            _backgroundImageScaled = [self scaleImage:_backgroundImage toSize:bounds.size contentMode: _backgroundImageContentMode];
-        }
-
-        [_backgroundImageScaled drawInRect:bounds];
     }
 
     for (CanvasText *text in _arrSketchOnText) {
@@ -292,6 +324,9 @@
                 _backgroundImageScaled = nil;
                 _backgroundImageContentMode = mode;
                 image = nil;
+                // without these the new image never reaches the drawing context
+                _backgroundDrawn = NO;
+                _needsFullRedraw = YES;
                 [self setNeedsDisplay];
 
                 success = YES;
