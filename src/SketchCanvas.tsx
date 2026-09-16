@@ -3,6 +3,13 @@
 import memoize from 'memoize-one';
 import React from 'react';
 import { PanResponder, PixelRatio, Platform, processColor } from 'react-native';
+
+// Everything below that changes how this canvas competes for a gesture was
+// written for ios, where a surrounding scroll view has a native pinch
+// recognizer that has to be able to take over. Android has no such thing, it
+// went through the same negotiation it always did, and loosening it there only
+// let the native scroll pull strokes away. So android keeps the old behaviour.
+const TUNED_FOR_IOS = Platform.OS === 'ios';
 import { requestPermissions } from './handlePermissions';
 import {
   type SketchCanvasProps,
@@ -49,8 +56,8 @@ class SketchCanvas extends React.Component<SketchCanvasProps, CanvasState> {
     permissionDialogTitle: '',
     permissionDialogMessage: '',
     canvasScale: 1,
-    minTravelToDraw: 12,
-    minDelayToDraw: 80,
+    minTravelToDraw: TUNED_FOR_IOS ? 12 : 0,
+    minDelayToDraw: TUNED_FOR_IOS ? 80 : 0,
   };
 
   _pathsToProcess: Path[];
@@ -101,7 +108,7 @@ class SketchCanvas extends React.Component<SketchCanvasProps, CanvasState> {
       // takes the touch away from ancestors before they can react, which stops
       // a surrounding scroll view from ever recognising a pinch.
       onStartShouldSetPanResponder: (evt, _gestureState) => {
-        if (evt.nativeEvent.touches.length > 1) {
+        if (TUNED_FOR_IOS && evt.nativeEvent.touches.length > 1) {
           // This is the earliest moment a second finger is visible, earlier
           // than any move event or the terminate that follows. Clearing the
           // path here keeps a pinch from flickering whatever the first finger
@@ -118,9 +125,9 @@ class SketchCanvas extends React.Component<SketchCanvasProps, CanvasState> {
 
         return true;
       },
-      onStartShouldSetPanResponderCapture: (_evt, _gestureState) => false,
-      onMoveShouldSetPanResponder: (_evt, _gestureState) => false,
-      onMoveShouldSetPanResponderCapture: (_evt, _gestureState) => false,
+      onStartShouldSetPanResponderCapture: (_evt, _gestureState) => !TUNED_FOR_IOS,
+      onMoveShouldSetPanResponder: (_evt, _gestureState) => !TUNED_FOR_IOS,
+      onMoveShouldSetPanResponderCapture: (_evt, _gestureState) => !TUNED_FOR_IOS,
 
       onPanResponderGrant: (evt, gestureState) => {
         if (!this.props.touchEnabled) {
@@ -140,10 +147,16 @@ class SketchCanvas extends React.Component<SketchCanvasProps, CanvasState> {
           width: this.props.strokeWidth,
           data: [],
         };
-        // The path is only handed to the native side once we know this gesture
-        // is a single finger draw. Drawing it here left a dot behind whenever
-        // the second finger of a pinch arrived, because the zoom recognizer can
-        // take the gesture away before any two finger move event reaches js.
+        // On ios the path is only handed to the native side once we know this
+        // gesture is a single finger draw. Drawing it here left a dot behind
+        // whenever the second finger of a pinch arrived, because the zoom
+        // recognizer can take the gesture away before any two finger move event
+        // reaches js. Android has no such takeover and did it right here, so it
+        // still does, which also keeps the first point of a stroke on screen a
+        // frame earlier.
+        if (!TUNED_FOR_IOS) {
+          this._beginPath();
+        }
       },
       onPanResponderMove: (_evt, gestureState) => {
         if (!this.props.touchEnabled) {
@@ -156,7 +169,10 @@ class SketchCanvas extends React.Component<SketchCanvasProps, CanvasState> {
           return this.props.onPinchStart?.();
         }
 
-        if (this._multiTouch) {
+        // Only on ios does a gesture stay written off once a second finger
+        // appeared. Before this file was tuned for ios, lifting back to one
+        // finger simply carried on drawing, and android keeps that.
+        if (TUNED_FOR_IOS && this._multiTouch) {
           return;
         }
 
@@ -190,6 +206,12 @@ class SketchCanvas extends React.Component<SketchCanvasProps, CanvasState> {
       },
 
       onPanResponderTerminate: (_evt, _gestureState) => {
+        if (!TUNED_FOR_IOS) {
+          // As before: a gesture taken over still commits what it drew.
+          this._handleStrokeEnd();
+          return;
+        }
+
         // Something else took the gesture over, a zoom recognizer for instance.
         this._endGesture(true);
       },
