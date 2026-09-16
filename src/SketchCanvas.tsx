@@ -278,10 +278,11 @@ class SketchCanvas extends React.Component<SketchCanvasProps, CanvasState> {
 
   _endGesture = (terminated: boolean) => {
     if (!this._pathStarted) {
-      // A tap that never moved draws nothing, which is what the canvas did
-      // before the rewrite to this library. A stroke that was over before the
-      // wait elapsed does get drawn, otherwise a quick flick would vanish.
-      if (terminated || this._multiTouch || !this._travelled) {
+      // Only a gesture that turned into something else is thrown away. What is
+      // left is a single finger that lifted before the path was handed over,
+      // either a tap, which has to draw its dot, or a stroke that was over
+      // before the wait elapsed, which would otherwise vanish.
+      if (terminated || this._multiTouch) {
         return this._discardPath();
       }
 
